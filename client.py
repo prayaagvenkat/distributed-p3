@@ -4,17 +4,15 @@ import sys
 import select
 import os
 
-SERVER_LOCATIONS = [('localhost', 3000), ('localhost', 3001), ('localhost', 3002)]
+SERVER_LOCATIONS = [('10.250.33.169', 3000), ('localhost', 3001), ('localhost', 3002)]
 
 def listener(s: socket):
     body_size = int.from_bytes(s.recv(action.BODY_SIZE), byteorder='big')
     [resp_name, timestamp, data] = action.decode_message(s.recv(body_size))
     if(resp_name == action.OK):
         print("Action succeeded")
-    elif(resp_name == action.NOTOK):    
+    elif(resp_name == action.NOTOK):
         print('Action failed')
-    elif(resp_name == action.RECV):
-        print('action received')
     elif(resp_name == action.ERROR):
         print('Server error')
     else: 
@@ -58,9 +56,8 @@ def main():
                 else:
                     reader(sockets, sys.stdin.readline().rstrip())
         except Exception as e:
-            #print(e)
-            #break
-            continue
+            print(e)
+            break
 
 
 main()

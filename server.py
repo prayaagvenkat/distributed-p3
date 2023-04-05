@@ -11,7 +11,6 @@ import sys
 DATA_FILE = 'usernames.pickle'
 STABLE_THRESHOLD = 2
 STABLE_POLL_TIME = 0.2
-VALID_ACTIONS = ['create', 'connect', 'delete', 'list', 'send']
 
 # data
 class User:
@@ -76,87 +75,74 @@ class ChatStore:
         else:
             return False
 
-    async def create_request(self, action_name: str, timestamp, data, connection) -> bool:
-        await self._pending_messages.put((action_name, timestamp, data, connection))
+    async def create_message(self, name: str, timestamp, text: str) -> bool:
+        await self._pending_messages.put((name, timestamp, text))
 
-    async def process_requests(self, loop):
+    async def process_messages(self, loop):
         while True:
-            (action_name, timestamp, data, connection) = await self._pending_messages.get()
+            (name, timestamp, text) = await self._pending_messages.get()
 
-            if (dt.now() - timestamp).total_seconds() >= STABLE_THRESHOLD:
-                try:
-                    name = ''
-                    print("ACTION: ", action_name)
-                    resp = None
-
-                    if(action_name == "create"):
-                        user = data[0]
-                        self.create_user(user)
-                        resp = action.encode_message(action.OK, [])
-                    elif(action_name == 'connect'):
-                        name = data[0]
-                        status = action.OK if await self.connect(name, loop, connection) else action.NOTOK
-                        resp = action.encode_message(status, [])
-                    elif(action_name == 'delete'):
-                        user = data[0]
-                        self.delete_user(user)
-                        if user == name:
-                            name = ''
-                        resp = action.encode_message(action.OK, [])
-                    elif(action_name == 'list'):
-                        pattern = data[0] if len(data) >= 1 else None
-                        users = self.list_users(pattern)
-                        resp = action.encode_message(action.LIST, users)
-                    elif(action_name == 'send'):
-                        
-                        
-                        [name, text] = data
-                        print('hi')
-                        await self._users[name].send_message(loop, text)
-                        print('ho')
-                    else:
-                        resp = action.encode_message(action.NOTOK, [])
-
-                    if resp:
-                        await loop.sock_sendall(connection, resp)
-
-
-
-                except Exception as ex:
-                    print(ex)
-                finally:
-                    self.disconnect(name)
-                    connection.close()
-
-            else: 
-                await self._pending_messages.put((action_name, timestamp, data, connection))
+            if name in self._users:
+                if (dt.now() - timestamp).total_seconds() >= STABLE_THRESHOLD:
+                    await self._users[name].send_message(loop, text)
+                else: 
+                    await self._pending_messages.put((name, timestamp, text))
             
             self._pending_messages.task_done()
 
-async def receive(store: ChatStore, connection: socket,
+async def reply(store: ChatStore, connection: socket,
             loop: asyncio.AbstractEventLoop) -> None:
     try:
+        name = ''
         while header_bytes := await loop.sock_recv(connection, action.BODY_SIZE):
             content_bytes = await loop.sock_recv(connection, int.from_bytes(header_bytes, byteorder='big'))
             [action_name, timestamp, data] = action.decode_message(content_bytes)
-            await loop.sock_sendall(connection, action.encode_message(action.RECV, []))
-            await store.create_request(action_name, timestamp, data, connection)
+            print("ACTION: ", action_name)
+            resp = None
+            if(action_name == "create"):
+                user = data[0]
+                store.create_user(user)
+                resp = action.encode_message(action.OK, [])
+            elif(action_name == 'connect'):
+                name = data[0]
+                status = action.OK if await store.connect(name, loop, connection) else action.NOTOK
+                resp = action.encode_message(status, [])
+            elif(action_name == 'delete'):
+                user = data[0]
+                store.delete_user(user)
+                if user == name:
+                    name = ''
+                resp = action.encode_message(action.OK, [])
+            elif(action_name == 'list'):
+                pattern = data[0] if len(data) >= 1 else None
+                users = store.list_users(pattern)
+                resp = action.encode_message(action.LIST, users)
+            elif(action_name == 'send'):
+                [user, text] = data
+                await store.create_message(user, timestamp, text)
+            else:
+                resp = action.encode_message(action.NOTOK, [])
+
+            if resp:
+                await loop.sock_sendall(connection, resp)
 
     except Exception as ex:
         print(ex)
+    finally:
+        store.disconnect(name)
+        connection.close()
 
 
 async def listen(store: ChatStore, server_socket: socket,
                                 loop: asyncio.AbstractEventLoop):
     
-    asyncio.create_task(store.process_requests(loop))
+    asyncio.create_task(store.process_messages(loop))
 
     while True:
-        print('hello')
         connection, address = await loop.sock_accept(server_socket)
         connection.setblocking(False)
         print(f"Got a connection from {address}")
-        asyncio.create_task(receive(store, connection, loop))
+        asyncio.create_task(reply(store, connection, loop))
 
 
 def save_data(store: ChatStore):
@@ -185,7 +171,7 @@ async def main():
     atexit.register(save_data, store)
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_address = ('localhost', port)
+    server_address = ('0.0.0.0', port)
     print("Server address " + str(server_address))
     server_socket.setblocking(False)
     server_socket.bind(server_address)

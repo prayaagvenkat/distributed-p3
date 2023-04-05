@@ -8,7 +8,6 @@ DATA_ID_SIZE = 10
 DELIMITER = ","
 OK = 'ok'
 NOTOK = 'notok'
-RECV = 'recv'
 STRING = 'string'
 LIST = 'list'
 ERROR ='error'
