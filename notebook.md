@@ -34,9 +34,15 @@ This replication strategy ensures the following correctness properties are satis
 
 ## Persistence
 
+Our persistence strategy involves the following steps:
+- Each server is independently persistent.
+- Upon exiting/crashing, a server will pickle its data (i.e. list of users) to be stored on disk.
+- Upon re/starting, a server will first check usernames.pickle to see if it can resume execution from previous execution.
+
 ## General design choices
 
 - One of the main design choices we made was to use the python module ''asyncio''. This allows us to execute the server actions concurrently without explicitly managing threads. This makes our code easier to check and avoid common bugs arising from trying to explicitly manage threads.
+- We used the asyncio.Queue class to keep track of pending messages from users to the servers in a concurrent-safe way. The server processes messages from this queue.
 - For the wire protocol, we chose the simplest specification that allowed us to correctly implement the necessary functionality. Our protocol permits encoding of appropriately-formatted string data corresponding as a sequence of bytes that can be communicated over a socket.
 - We highlight our usage of Python's ``select()'' utility. This allows us to monitor, from the client-side, for a socket corresponding to the server. It allows for the client to wait for asynchronous communication from the server.
 - For our design, we implemented two classes "User" and "ChatStore". These are just data structures we use to collect information about users. The server maintains a "ChatStore" object that is updated based on commands it receives from clients.

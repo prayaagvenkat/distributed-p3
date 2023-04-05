@@ -1,3 +1,11 @@
+""" CS 262: Design Exercise 3
+
+Authors: Prayaag Venkat, Hugh Zhang
+
+This code implements a wire protocol for a fault-tolerant, persistent chat application.
+Same as in Exercise 1, but client messages now have a local timestamp.
+"""
+
 from datetime import datetime as dt
 from typing import List
 

@@ -1,11 +1,20 @@
+""" CS 262: Design Exercise 3
+
+Authors: Prayaag Venkat, Hugh Zhang
+
+This code implements a fault-tolerant, persistent chat client application.
+"""
+
 import socket
 import action
 import sys
 import select
 import os
 
+# Address/port of 3 server replicas.
 SERVER_LOCATIONS = [('10.250.33.169', 3000), ('localhost', 3001), ('localhost', 3002)]
 
+# Listen for responses from servers to this client
 def listener(s: socket):
     body_size = int.from_bytes(s.recv(action.BODY_SIZE), byteorder='big')
     [resp_name, timestamp, data] = action.decode_message(s.recv(body_size))
@@ -18,6 +27,7 @@ def listener(s: socket):
     else: 
         print("Server: " + ", ".join(data))
 
+# Read inout commands from client and send to servers
 def reader(socks, line: str):
     command = line.split()
     action_name = command[0]
@@ -26,9 +36,11 @@ def reader(socks, line: str):
     if(len(args) > 1):
         args = [args[0], " ".join(args[1:])]
 
+    # Replicate messages by sending to all available servers
     for s in socks:
         s.sendall(action.encode_message(action_name, args))
 
+# Main function
 def main():
     hosts = SERVER_LOCATIONS
     sockets = []
@@ -52,8 +64,10 @@ def main():
 
             for s in read_sockets:
                 if s in sockets:
+                    # Server to client response
                     listener(s)
                 else:
+                    # Client to server command
                     reader(sockets, sys.stdin.readline().rstrip())
         except Exception as e:
             print(e)
