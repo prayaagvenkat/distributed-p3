@@ -40,9 +40,9 @@ class User:
     """
 
     # Initialize all fields to empty
-    def __init__(self, name: str):
+    def __init__(self, name: str, msgs=[]):
         self._name = name
-        self._messages = []
+        self._messages = msgs
         self._connection = None
 
     # Connect user to socket, to receive messages from server
@@ -84,18 +84,20 @@ class ChatStore:
     """
 
     # Initialize fields to be empty, create new users
-    def __init__(self, users):
+    def __init__(self, data):
         # key: user name str
         # value: User class
         self._users = {}
         self._pending_messages = asyncio.Queue()
 
-        for user in users:
-            self.create_user(user)
+        for (user,msgs) in data:
+            self.create_user(user,msgs)
+        
+        
 
     # create a new user
-    def create_user(self, name: str):
-        self._users[name] = User(name)
+    def create_user(self, name: str, msgs=[]):
+        self._users[name] = User(name,msgs)
 
     # Delete user
     def delete_user(self, name: str):
@@ -200,22 +202,32 @@ async def listen(store: ChatStore, server_socket: socket,
 def save_data(store: ChatStore):
     print('Saving server state...')
     with open(DATA_FILE, 'wb') as handle:
-        pickle.dump(list(store._users.keys()), handle, protocol=pickle.HIGHEST_PROTOCOL)
+        data = []
+        for name, user in store._users.items():
+            data.append((name, user._messages))
+        pickle.dump(data, handle)
 
 # Load up pickled list of users
 def load_data():
     try:
         with open(DATA_FILE, 'rb') as handle:
-            return pickle.load(handle)
+            print('Loading store from file')
+            data = pickle.load(handle)
+
+            return ChatStore(data)
+        
     except:
-        return []
+        return None
 
 # Main function
 async def main():
     # init store with saved data
-    usernames = load_data()
-    print(usernames)
-    store = ChatStore(users=usernames)
+    store = load_data()
+    if store:
+        print(list(store._users.keys()))
+    else:
+        print('Starting new store')
+        store = ChatStore([])
 
     # Read port number of host from command line
     port = int(sys.argv[1])
